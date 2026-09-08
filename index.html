@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TWSE 過去 5 個交易日零股行情查詢</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #07111f;
+      --panel: #101d30;
+      --panel-2: #15263d;
+      --border: #2c4564;
+      --text: #e6edf7;
+      --muted: #9fb0c4;
+      --accent: #4db6ff;
+      --good: #4ade80;
+      --bad: #fb7185;
+      --warn: #fbbf24;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 10%, #123963 0, transparent 35%),
+        radial-gradient(circle at 85% 85%, #1a3155 0, transparent 35%),
+        var(--bg);
+    }
+
+    main {
+      width: min(100%, 1500px);
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.55rem, 4vw, 2.1rem);
+    }
+
+    .subtitle {
+      margin: 10px 0 24px;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    .panel {
+      padding: 22px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: rgb(16 29 48 / 90%);
+      box-shadow: 0 16px 42px rgb(0 0 0 / 25%);
+    }
+
+    form {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 12px;
+    }
+
+    label {
+      display: grid;
+      min-width: 240px;
+      gap: 7px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    input, button {
+      min-height: 44px;
+      border-radius: 10px;
+      font: inherit;
+    }
+
+    input {
+      width: 100%;
+      padding: 0 12px;
+      color: var(--text);
+      background: #091525;
+      border: 1px solid var(--border);
+      outline: none;
+    }
+
+    input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgb(77 182 255 / 18%);
+    }
+
+    button {
+      padding: 0 20px;
+      cursor: pointer;
+      color: #04111f;
+      font-weight: 700;
+      background: var(--accent);
+      border: 0;
+    }
+
+    button:disabled {
+      cursor: wait;
+      opacity: 0.65;
+    }
+
+    #status {
+      margin-top: 18px;
+    }
+
+    .message {
+      padding: 14px;
+      border-radius: 10px;
+      line-height: 1.6;
+    }
+
+    .loading {
+      color: #dbeafe;
+      background: rgb(59 130 246 / 16%);
+      border: 1px solid rgb(96 165 250 / 38%);
+    }
+
+    .error {
+      color: #ffe4e6;
+      background: rgb(244 63 94 / 14%);
+      border: 1px solid rgb(251 113 133 / 42%);
+    }
+
+    .warning {
+      color: #fef3c7;
+      background: rgb(245 158 11 / 14%);
+      border: 1px solid rgb(251 191 36 / 42%);
+    }
+
+    .table-wrap {
+      margin-top: 14px;
+      overflow: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--panel);
+    }
+
+    table {
+      width: max-content;
+      min-width: 0;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      line-height: 1.25;
+      font-variant-numeric: tabular-nums;
+    }
+
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      color: #eaf5ff;
+      background: #173456;
+      box-shadow: 0 1px 0 var(--border);
+    }
+
+    th, td {
+      padding: 6px 8px;
+      text-align: right;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border);
+    }
+
+    th {
+      font-size: 0.76rem;
+      font-weight: 650;
+    }
+
+    td {
+      max-width: 130px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    th:nth-child(1), td:nth-child(1) { width: 90px; min-width: 90px; }
+    th:nth-child(2), td:nth-child(2) { width: 68px; min-width: 68px; }
+    th:nth-child(3), td:nth-child(3) { width: 145px; min-width: 110px; max-width: 145px; }
+    th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5) { width: 92px; min-width: 72px; }
+    th:nth-child(n + 6), td:nth-child(n + 6) { width: 82px; min-width: 64px; }
+
+    th:first-child, td:first-child,
+    th:nth-child(2), td:nth-child(2),
+    th:nth-child(3), td:nth-child(3) {
+      text-align: left;
+    }
+
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr:hover { background: rgb(77 182 255 / 7%); }
+
+    .date-cell { color: #b9dfff; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .code-cell { color: #dbeafe; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .price-cell { color: var(--good); font-weight: 800; }
+    .no-trade { color: var(--warn); }
+    .note { margin: 14px 2px 0; color: var(--muted); font-size: 0.86rem; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>TWSE 過去 5 個交易日零股行情</h1>
+    <p class="subtitle">輸入股票或 ETF 代號與截止日期；程式會往前逐日查詢，取得最近 5 個有回傳資料的交易日。</p>
+
+    <section class="panel">
+      <form id="queryForm">
+        <label>
+          股票代號
+          <input id="code" type="text" inputmode="text" value="0050" placeholder="例如：0050、2330、006208" maxlength="12" autocomplete="off" required>
+        </label>
+
+        <label>
+          日期
+          <input id="endDate" type="date" required>
+        </label>
+
+        <button id="submitButton" type="submit">查詢過去 5 天</button>
+      </form>
+
+      <div id="status" aria-live="polite">
+        <div class="message">請輸入資料後按「查詢過去 5 天」。</div>
+      </div>
+
+      <div id="tableArea"></div>
+
+      <p class="note">
+        資料來源：TWSE 盤後零股交易行情。透過 CORS 代理取得資料。
+      </p>
+    </section>
+  </main>
+
+  <script>
+    const TWSE_ENDPOINT = "https://www.twse.com.tw/rwd/zh/afterTrading/TWT53U";
+    const TARGET_DAYS = 5;
+    const MAX_LOOKBACK_DAYS = 45;
+
+    const FIELDS = [
+      "證券代號",
+      "證券名稱",
+      "成交價",
+      "成交股數",
+      "最後揭示買價",
+      "最後揭示買量",
+      "最後揭示賣價",
+      "最後揭示賣量"
+    ];
+
+    const form = document.querySelector("#queryForm");
+    const codeInput = document.querySelector("#code");
+    const endDateInput = document.querySelector("#endDate");
+    const submitButton = document.querySelector("#submitButton");
+    const status = document.querySelector("#status");
+    const tableArea = document.querySelector("#tableArea");
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const year = yesterday.getFullYear();
+    const month = String(yesterday.getMonth() + 1).padStart(2, "0");
+    const day = String(yesterday.getDate()).padStart(2, "0");
+    endDateInput.value = `${year}-${month}-${day}`;
+
+    function normalizeCode(value) {
+      return String(value || "").trim().toUpperCase().replaceAll(" ", "");
+    }
+
+    function parseLocalDate(value) {
+      const parts = String(value || "").split("-").map(Number);
+      if (parts.length !== 3 || parts.some((part) => !Number.isInteger(part))) return null;
+      const date = new Date(parts[0], parts[1] - 1, parts[2]);
+      if (date.getFullYear() !== parts[0] || date.getMonth() !== parts[1] - 1 || date.getDate() !== parts[2]) return null;
+      return date;
+    }
+
+    function formatTWSEDate(date) {
+      return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+    }
+
+    function formatDisplayDate(dateText) {
+      const text = String(dateText || "");
+      if (text.length === 8) return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
+      return text || "--";
+    }
+
+    function previousDay(date) {
+      const copy = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      copy.setDate(copy.getDate() - 1);
+      return copy;
+    }
+
+    function setStatus(message, type) {
+      status.replaceChildren();
+      const box = document.createElement("div");
+      box.className = "message" + (type ? " " + type : "");
+      box.textContent = message;
+      status.append(box);
+    }
+
+    function createCell(tagName, text, className) {
+      const cell = document.createElement(tagName);
+      cell.textContent = text == null || text === "" ? "--" : String(text);
+      if (className) cell.className = className;
+      return cell;
+    }
+
+    function rowToObject(fields, row) {
+      return Object.fromEntries(fields.map((field, index) => [field, row[index]]));
+    }
+
+    function isNoDataPayload(payload) {
+      return payload && payload.stat === "很抱歉，沒有符合條件的資料!";
+    }
+
+    function isOkPayload(payload) {
+      return payload && payload.stat === "OK" && Array.isArray(payload.fields) && Array.isArray(payload.data);
+    }
+
+    async function fetchOneDay(dateText) {
+      const twseUrl = new URL(TWSE_ENDPOINT);
+      twseUrl.searchParams.set("date", dateText);
+      twseUrl.searchParams.set("selectType", "ALL");
+      twseUrl.searchParams.set("response", "json");
+
+      // 透過 corsproxy.io 解決 GitHub Pages 的瀏覽器跨網域阻擋
+      const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(twseUrl.toString());
+
+      const response = await fetch(proxyUrl, {
+        method: "GET"
+      });
+
+      if (!response.ok) {
+        throw new Error("TWSE 回應失敗：HTTP " + response.status + " " + response.statusText);
+      }
+
+      return response.json();
+    }
+
+    function findStockRow(payload, code) {
+      const codeIndex = payload.fields.indexOf("證券代號");
+      if (codeIndex === -1) throw new Error("TWSE 回傳格式異常：找不到「證券代號」欄位。");
+      const row = payload.data.find((item) => String(item[codeIndex]).trim().toUpperCase() === code);
+      return row ? rowToObject(payload.fields, row) : null;
+    }
+
+    function renderTable(records) {
+      tableArea.replaceChildren();
+      const wrapper = document.createElement("div");
+      wrapper.className = "table-wrap";
+      const table = document.createElement("table");
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      headerRow.append(createCell("th", "日期"));
+
+      for (const field of FIELDS) {
+        headerRow.append(createCell("th", field));
+      }
+      thead.append(headerRow);
+
+      const tbody = document.createElement("tbody");
+      for (const record of records) {
+        const tr = document.createElement("tr");
+        tr.append(createCell("td", formatDisplayDate(record.date), "date-cell"));
+
+        for (const field of FIELDS) {
+          let className = "";
+          if (field === "證券代號") className = "code-cell";
+          if (field === "成交價") className = record.item[field] === "--" ? "no-trade" : "price-cell";
+          tr.append(createCell("td", record.item[field], className));
+        }
+        tbody.append(tr);
+      }
+
+      table.append(thead, tbody);
+      wrapper.append(table);
+      tableArea.append(wrapper);
+    }
+
+    async function findRecentTradingData(code, endDate) {
+      const records = [];
+      let currentDate = endDate;
+      let searchedDays = 0;
+      let skippedNoDataDays = 0;
+
+      while (records.length < TARGET_DAYS && searchedDays < MAX_LOOKBACK_DAYS) {
+        const dateText = formatTWSEDate(currentDate);
+        setStatus(`正在查詢 ${dateText}（已取得 ${records.length}/${TARGET_DAYS} 個有效交易日）…`, "loading");
+
+        let payload;
+        try {
+          payload = await fetchOneDay(dateText);
+        } catch (error) {
+          throw new Error("跨網域請求失敗或網路問題：" + error.message);
+        }
+
+        if (isNoDataPayload(payload)) {
+          skippedNoDataDays += 1;
+        } else if (isOkPayload(payload)) {
+          const item = findStockRow(payload, code);
+          if (item) {
+            records.push({ date: payload.date || dateText, item });
+          }
+        }
+
+        currentDate = previousDay(currentDate);
+        searchedDays += 1;
+      }
+
+      return { records, searchedDays, skippedNoDataDays };
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const code = normalizeCode(codeInput.value);
+      const endDate = parseLocalDate(endDateInput.value);
+
+      tableArea.replaceChildren();
+
+      if (!code) {
+        setStatus("請輸入股票代號，例如：0050。", "error");
+        codeInput.focus();
+        return;
+      }
+
+      if (!endDate) {
+        setStatus("請選擇有效的截止日期。", "error");
+        endDateInput.focus();
+        return;
+      }
+
+      submitButton.disabled = true;
+      submitButton.textContent = "查詢中…";
+
+      try {
+        const result = await findRecentTradingData(code, endDate);
+        const records = result.records;
+
+        if (records.length === 0) {
+          setStatus(`從 ${formatTWSEDate(endDate)} 往前查詢 ${result.searchedDays} 天，找不到「${code}」的有效零股資料。`, "warning");
+          return;
+        }
+
+        renderTable(records);
+        let message = `已取得「${code}」共 ${records.length} 個有效交易日的零股行情。`;
+        if (records.length < TARGET_DAYS) {
+          message += ` 已搜尋 ${result.searchedDays} 個日曆日，仍不足 ${TARGET_DAYS} 筆。`;
+        } else if (result.skippedNoDataDays > 0) {
+          message += ` 已自動排除 ${result.skippedNoDataDays} 個 TWSE 無資料日期。`;
+        }
+        setStatus(message, "loading");
+      } catch (error) {
+        console.error("TWSE query failed:", error);
+        setStatus(String(error && error.message ? error.message : error), "error");
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = "查詢過去 5 天";
+      }
+    });
+  </script>
+</body>
+</html>
