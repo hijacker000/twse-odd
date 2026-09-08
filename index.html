@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="referrer" content="no-referrer">
   <title>TWSE 過去 5 個交易日零股行情查詢</title>
   <style>
     :root {
@@ -227,7 +228,7 @@
       <div id="tableArea"></div>
 
       <p class="note">
-        資料來源：TWSE 盤後零股交易行情。透過 CORS 代理取得資料。
+        資料來源：TWSE 盤後零股交易行情。
       </p>
     </section>
   </main>
@@ -257,10 +258,12 @@
 
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
+
     const year = yesterday.getFullYear();
     const month = String(yesterday.getMonth() + 1).padStart(2, "0");
     const day = String(yesterday.getDate()).padStart(2, "0");
-    endDateInput.value = `${year}-${month}-${day}`;
+
+    endDateInput.value = year + "-" + month + "-" + day;
 
     function normalizeCode(value) {
       return String(value || "").trim().toUpperCase().replaceAll(" ", "");
@@ -275,12 +278,17 @@
     }
 
     function formatTWSEDate(date) {
-      return `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+      const year = String(date.getFullYear());
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return year + month + day;
     }
 
     function formatDisplayDate(dateText) {
       const text = String(dateText || "");
-      if (text.length === 8) return `${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}`;
+      if (text.length === 8) {
+        return text.slice(0, 4) + "-" + text.slice(4, 6) + "-" + text.slice(6, 8);
+      }
       return text || "--";
     }
 
@@ -323,15 +331,20 @@
       twseUrl.searchParams.set("selectType", "ALL");
       twseUrl.searchParams.set("response", "json");
 
-      // 透過 corsproxy.io 解決 GitHub Pages 的瀏覽器跨網域阻擋
-      const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(twseUrl.toString());
-
-      const response = await fetch(proxyUrl, {
-        method: "GET"
+      const response = await fetch(twseUrl.toString(), {
+        method: "GET",
+        referrerPolicy: "no-referrer", // 移除 Referer 與 Origin 洩漏
+        headers: { Accept: "application/json, text/plain, */*" }
       });
 
       if (!response.ok) {
         throw new Error("TWSE 回應失敗：HTTP " + response.status + " " + response.statusText);
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("application/json")) {
+        const text = await response.text();
+        throw new Error("TWSE 回傳內容不是 JSON。Content-Type: " + contentType + "；內容前段：" + text.slice(0, 160));
       }
 
       return response.json();
@@ -339,15 +352,20 @@
 
     function findStockRow(payload, code) {
       const codeIndex = payload.fields.indexOf("證券代號");
-      if (codeIndex === -1) throw new Error("TWSE 回傳格式異常：找不到「證券代號」欄位。");
+      if (codeIndex === -1) {
+        throw new Error("TWSE 回傳格式異常：找不到「證券代號」欄位。");
+      }
+
       const row = payload.data.find((item) => String(item[codeIndex]).trim().toUpperCase() === code);
       return row ? rowToObject(payload.fields, row) : null;
     }
 
     function renderTable(records) {
       tableArea.replaceChildren();
+
       const wrapper = document.createElement("div");
       wrapper.className = "table-wrap";
+
       const table = document.createElement("table");
       const thead = document.createElement("thead");
       const headerRow = document.createElement("tr");
@@ -356,6 +374,7 @@
       for (const field of FIELDS) {
         headerRow.append(createCell("th", field));
       }
+
       thead.append(headerRow);
 
       const tbody = document.createElement("tbody");
@@ -366,9 +385,12 @@
         for (const field of FIELDS) {
           let className = "";
           if (field === "證券代號") className = "code-cell";
-          if (field === "成交價") className = record.item[field] === "--" ? "no-trade" : "price-cell";
+          if (field === "成交價") {
+            className = record.item[field] === "--" ? "no-trade" : "price-cell";
+          }
           tr.append(createCell("td", record.item[field], className));
         }
+
         tbody.append(tr);
       }
 
@@ -385,13 +407,20 @@
 
       while (records.length < TARGET_DAYS && searchedDays < MAX_LOOKBACK_DAYS) {
         const dateText = formatTWSEDate(currentDate);
-        setStatus(`正在查詢 ${dateText}（已取得 ${records.length}/${TARGET_DAYS} 個有效交易日）…`, "loading");
+        setStatus(
+          "正在查詢 " + dateText + "（已取得 " + records.length + "/" + TARGET_DAYS + " 個有效交易日）…",
+          "loading"
+        );
 
         let payload;
         try {
           payload = await fetchOneDay(dateText);
         } catch (error) {
-          throw new Error("跨網域請求失敗或網路問題：" + error.message);
+          const message = String(error && error.message ? error.message : error);
+          if (error instanceof TypeError || /failed to fetch|networkerror|load failed/i.test(message)) {
+            throw new Error("瀏覽器無法讀取 TWSE 的跨網域回應。請在 F12 → Console 確認是否出現 CORS policy 錯誤。");
+          }
+          throw error;
         }
 
         if (isNoDataPayload(payload)) {
@@ -399,8 +428,13 @@
         } else if (isOkPayload(payload)) {
           const item = findStockRow(payload, code);
           if (item) {
-            records.push({ date: payload.date || dateText, item });
+            records.push({
+              date: payload.date || dateText,
+              item
+            });
           }
+        } else {
+          console.warn("Unexpected TWSE payload:", payload);
         }
 
         currentDate = previousDay(currentDate);
@@ -412,6 +446,7 @@
 
     form.addEventListener("submit", async (event) => {
       event.preventDefault();
+
       const code = normalizeCode(codeInput.value);
       const endDate = parseLocalDate(endDateInput.value);
 
@@ -437,21 +472,26 @@
         const records = result.records;
 
         if (records.length === 0) {
-          setStatus(`從 ${formatTWSEDate(endDate)} 往前查詢 ${result.searchedDays} 天，找不到「${code}」的有效零股資料。`, "warning");
+          setStatus(
+            "從 " + formatTWSEDate(endDate) + " 往前查詢 " + result.searchedDays + " 天，找不到「" + code + "」的有效零股資料。",
+            "warning"
+          );
           return;
         }
 
         renderTable(records);
-        let message = `已取得「${code}」共 ${records.length} 個有效交易日的零股行情。`;
+
+        let message = "已取得「" + code + "」共 " + records.length + " 個有效交易日的零股行情。";
         if (records.length < TARGET_DAYS) {
-          message += ` 已搜尋 ${result.searchedDays} 個日曆日，仍不足 ${TARGET_DAYS} 筆。`;
+          message += " 已搜尋 " + result.searchedDays + " 個日曆日，仍不足 " + TARGET_DAYS + " 筆。";
         } else if (result.skippedNoDataDays > 0) {
-          message += ` 已自動排除 ${result.skippedNoDataDays} 個 TWSE 無資料日期。`;
+          message += " 已自動排除 " + result.skippedNoDataDays + " 個 TWSE 無資料日期。";
         }
         setStatus(message, "loading");
       } catch (error) {
         console.error("TWSE query failed:", error);
-        setStatus(String(error && error.message ? error.message : error), "error");
+        const message = String(error && error.message ? error.message : error);
+        setStatus(message, "error");
       } finally {
         submitButton.disabled = false;
         submitButton.textContent = "查詢過去 5 天";
