@@ -280,9 +280,25 @@
     const day = String(today.getDate()).padStart(2, "0");
     endDateInput.value = `${year}-${month}-${day}`;
 
-    // 取得焦點時反白全選，方便直接鍵入替換，不阻擋 autocomplete 下拉選單
+   // 取得焦點時反白全選，方便直接鍵入替換，不阻擋 autocomplete 下拉選單
     codeInput.addEventListener("focus", () => {
       codeInput.select();
+    });
+
+    // 限制英數字，且連打「++」瞬間清空
+    codeInput.addEventListener("input", () => {
+      // 偵測到連打 2 次 + 即清空
+      if (codeInput.value.includes("++")) {
+        codeInput.value = "";
+        return;
+      }
+      // 只保留英文字母、數字以及暫時輸入的第一個 +
+      codeInput.value = codeInput.value.replace(/[^a-zA-Z0-9+]/g, "").toUpperCase();
+    });
+
+    // 離開輸入框時若殘留單一個 + 則自動清除
+    codeInput.addEventListener("blur", () => {
+      codeInput.value = codeInput.value.replaceAll("+", "");
     });
 
     function normalizeCode(value) {
