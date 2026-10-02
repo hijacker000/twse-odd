@@ -210,7 +210,16 @@
       <form id="queryForm">
         <label>
           股票代號
-          <input id="code" type="text" inputmode="text" maxlength="12" autocomplete="off" placeholder="例如：2330 或 0050" required>
+          <input
+            id="code"
+            name="stock_code"
+            type="text"
+            inputmode="text"
+            maxlength="12"
+            autocomplete="on"
+            placeholder="例如：2330 或 0050"
+            required
+          >
         </label>
 
         <label>
@@ -240,7 +249,6 @@
   </main>
 
   <script>
-    // GitHub Pages 直接讀取同 Repo 產生的 JSON 資料
     const DATA_SOURCE_URL = "./data/odd_history.json";
     const TARGET_DAYS = 5;
 
@@ -262,7 +270,7 @@
     const status = document.querySelector("#status");
     const tableArea = document.querySelector("#tableArea");
 
-    // 全域快取，避免每次點查詢都重新下載 JSON
+    // 快取 JSON 資料，避免重複請求
     let cachedHistoryData = null;
 
     // 預設日期為今天
@@ -272,9 +280,9 @@
     const day = String(today.getDate()).padStart(2, "0");
     endDateInput.value = `${year}-${month}-${day}`;
 
-    // 點擊股票代號輸入框時自動反選清空
-    codeInput.addEventListener("click", () => {
-      codeInput.value = "";
+    // 取得焦點時反白全選，方便直接鍵入替換，不阻擋 autocomplete 下拉選單
+    codeInput.addEventListener("focus", () => {
+      codeInput.select();
     });
 
     function normalizeCode(value) {
@@ -343,7 +351,6 @@
       tableArea.append(wrapper);
     }
 
-    // 載入資料庫 JSON
     async function loadDataset() {
       if (cachedHistoryData) return cachedHistoryData;
 
@@ -361,7 +368,7 @@
       event.preventDefault();
 
       const code = normalizeCode(codeInput.value);
-      const endDateValue = endDateInput.value.replaceAll("-", ""); // 轉為 YYYYMMDD
+      const endDateValue = endDateInput.value.replaceAll("-", "");
 
       tableArea.replaceChildren();
 
@@ -383,7 +390,6 @@
           return;
         }
 
-        // 篩選小於等於截止日的交易日
         const matchedRecords = [];
         for (const dateStr of availableDates) {
           if (dateStr <= endDateValue) {
