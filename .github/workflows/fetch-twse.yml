@@ -1,4 +1,4 @@
-name: TWSE Odd Lot Fetch
+name: TWSE Stock Fetch
 
 on:
   schedule:
@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       target_date:
-        description: '手動重抓日期 (格式: YYYYMMDD，留空代表今天)'
+        description: '手動重抓日期 (YYYYMMDD，留空代表今天)'
         required: false
         default: ''
 
@@ -29,11 +29,15 @@ jobs:
       - name: Fetch TWSE Data
         env:
           TARGET_DATE: ${{ github.event.inputs.target_date }}
-        run: node scripts/fetch-twse.js
+        run: node scripts/fetch-twse.mjs
 
       - name: Commit and push changes
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/odd_history.json
-          git diff --quiet && git diff --staged --quiet || (git commit -m "chore(data): update TWSE odd lot data" && git push)
+          if [ -f data/odd_history.json ]; then
+            git add data/odd_history.json
+            git diff --staged --quiet || (git commit -m "chore(data): update twse stock data" && git push)
+          else
+            echo "尚未產生資料檔，略過 commit。"
+          fi
