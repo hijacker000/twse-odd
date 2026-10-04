@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="no-referrer">
-  <title>TWSE 過去 5 個交易日行情查詢 (零股 + 整股)</title>
+  <title>台股過去 5 個交易日行情查詢 (上市/上櫃 零股+整股)</title>
   <style>
     :root {
       color-scheme: dark;
@@ -201,8 +201,8 @@
 </head>
 <body>
   <main>
-    <h1>TWSE 過去 5 個交易日行情查詢</h1>
-    <p class="subtitle">同步整合「盤後零股」與「當日整股」成交數據。</p>
+    <h1>台股過去 5 個交易日行情查詢</h1>
+    <p class="subtitle">支援上市 / 上櫃全市場股票，整合「盤後零股」與「當日整股」成交數據。</p>
 
     <section class="panel">
       <form id="queryForm">
@@ -215,7 +215,7 @@
             inputmode="text"
             maxlength="12"
             autocomplete="on"
-            placeholder="例如：2330 或 0050"
+            placeholder="例如：2330(上市) 或 8069(上櫃)"
             required
           >
         </label>
@@ -235,7 +235,7 @@
       <div id="tableArea"></div>
 
       <p class="note">
-        資料來源：TWSE 盤後零股交易行情 (TWT53U) & 當日收盤行情 (MI_INDEX)。
+        資料來源：TWSE (臺灣證券交易所) & TPEx (證券櫃檯買賣中心)。
       </p>
 
       <p class="note">
@@ -259,19 +259,16 @@
 
     let cachedHistoryData = null;
 
-    // 預設日期為今天
     const today = new Date();
     const year = today.getFullYear();
     const month = String(today.getMonth() + 1).padStart(2, "0");
     const day = String(today.getDate()).padStart(2, "0");
     endDateInput.value = `${year}-${month}-${day}`;
 
-    // 焦點反白全選
     codeInput.addEventListener("focus", () => {
       codeInput.select();
     });
 
-    // 限制英數字，連打「++」瞬間清空
     codeInput.addEventListener("input", () => {
       if (codeInput.value.includes("++")) {
         codeInput.value = "";
@@ -362,7 +359,7 @@
         tr.append(createCell("td", record.code, "code-cell"));
         tr.append(createCell("td", record.item.name || "--"));
 
-        // 盤後零股
+        // 零股
         tr.append(createCell("td", odd.price, odd.price === "--" ? "no-trade" : "price-cell"));
         tr.append(createCell("td", odd.volume));
         tr.append(createCell("td", odd.bidPrice));
@@ -370,7 +367,7 @@
         tr.append(createCell("td", odd.askPrice));
         tr.append(createCell("td", odd.askVol));
 
-        // 整股成交資訊
+        // 整股
         tr.append(createCell("td", round.close, "price-cell"));
 
         let rateClass = "";
@@ -410,7 +407,7 @@
       tableArea.replaceChildren();
 
       if (!code) {
-        setStatus("請輸入股票代號，例如：2330。", "error");
+        setStatus("請輸入股票代號，例如：2330 或 8069。", "error");
         codeInput.focus();
         return;
       }
