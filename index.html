@@ -4,19 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="referrer" content="no-referrer">
-  <title>TWSE 過去 5 個交易日零股行情查詢</title>
+  <title>TWSE 過去 5 個交易日行情查詢 (零股 + 整股)</title>
   <style>
     :root {
       color-scheme: dark;
       --bg: #07111f;
       --panel: #101d30;
-      --panel-2: #15263d;
       --border: #2c4564;
       --text: #e6edf7;
       --muted: #9fb0c4;
       --accent: #4db6ff;
-      --good: #4ade80;
-      --bad: #fb7185;
+      --up: #f87171;    /* 紅漲 */
+      --down: #4ade80;  /* 綠跌 */
       --warn: #fbbf24;
     }
 
@@ -144,11 +143,11 @@
     }
 
     table {
-      width: max-content;
-      min-width: 0;
+      width: 100%;
+      min-width: 950px;
       border-collapse: collapse;
-      font-size: 0.82rem;
-      line-height: 1.25;
+      font-size: 0.85rem;
+      line-height: 1.3;
       font-variant-numeric: tabular-nums;
     }
 
@@ -158,32 +157,30 @@
       z-index: 2;
       color: #eaf5ff;
       background: #173456;
-      box-shadow: 0 1px 0 var(--border);
-    }
-
-    th, td {
-      padding: 6px 8px;
-      text-align: right;
-      white-space: nowrap;
-      border-bottom: 1px solid var(--border);
-    }
-
-    th {
-      font-size: 0.76rem;
+      border: 1px solid var(--border);
+      padding: 7px 8px;
       font-weight: 650;
     }
 
-    td {
-      max-width: 130px;
-      overflow: hidden;
-      text-overflow: ellipsis;
+    th.odd-group-header {
+      background: #1b3860;
+      color: #bae6fd;
+      border-bottom: 2px solid var(--accent);
     }
 
-    th:nth-child(1), td:nth-child(1) { width: 90px; min-width: 90px; }
-    th:nth-child(2), td:nth-child(2) { width: 68px; min-width: 68px; }
-    th:nth-child(3), td:nth-child(3) { width: 145px; min-width: 110px; max-width: 145px; }
-    th:nth-child(4), td:nth-child(4), th:nth-child(5), td:nth-child(5) { width: 92px; min-width: 72px; }
-    th:nth-child(n + 6), td:nth-child(n + 6) { width: 82px; min-width: 64px; }
+    th.round-group-header {
+      background: #23344d;
+      color: #fde68a;
+      border-bottom: 2px solid var(--warn);
+    }
+
+    td {
+      padding: 7px 9px;
+      text-align: right;
+      white-space: nowrap;
+      border-bottom: 1px solid var(--border);
+      border-right: 1px solid rgb(44 69 100 / 40%);
+    }
 
     th:first-child, td:first-child,
     th:nth-child(2), td:nth-child(2),
@@ -191,20 +188,21 @@
       text-align: left;
     }
 
-    tbody tr:last-child td { border-bottom: 0; }
     tbody tr:hover { background: rgb(77 182 255 / 7%); }
 
     .date-cell { color: #b9dfff; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
     .code-cell { color: #dbeafe; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .price-cell { color: var(--good); font-weight: 800; }
+    .price-cell { color: #f8fafc; font-weight: 700; }
+    .rate-up { color: var(--up); font-weight: 700; }
+    .rate-down { color: var(--down); font-weight: 700; }
     .no-trade { color: var(--warn); }
     .note { margin: 14px 2px 0; color: var(--muted); font-size: 0.86rem; line-height: 1.6; }
   </style>
 </head>
 <body>
   <main>
-    <h1>TWSE 過去 5 個交易日零股行情</h1>
-    <p class="subtitle">由 GitHub Actions 定時自動同步資料；輸入股票或 ETF 代號與截止日期進行快速查詢。</p>
+    <h1>TWSE 過去 5 個交易日行情查詢</h1>
+    <p class="subtitle">同步整合「盤後零股」與「當日整股」成交數據。</p>
 
     <section class="panel">
       <form id="queryForm">
@@ -237,7 +235,7 @@
       <div id="tableArea"></div>
 
       <p class="note">
-        資料來源：TWSE 盤後零股交易行情（由 GitHub Actions 每日自動排程彙整）。
+        資料來源：TWSE 盤後零股交易行情 (TWT53U) & 當日收盤行情 (MI_INDEX)。
       </p>
 
       <p class="note">
@@ -252,17 +250,6 @@
     const DATA_SOURCE_URL = "./data/odd_history.json";
     const TARGET_DAYS = 5;
 
-    const FIELDS = [
-      "證券代號",
-      "證券名稱",
-      "成交價",
-      "成交股數",
-      "最後揭示買價",
-      "最後揭示買量",
-      "最後揭示賣價",
-      "最後揭示賣量"
-    ];
-
     const form = document.querySelector("#queryForm");
     const codeInput = document.querySelector("#code");
     const endDateInput = document.querySelector("#endDate");
@@ -270,7 +257,6 @@
     const status = document.querySelector("#status");
     const tableArea = document.querySelector("#tableArea");
 
-    // 快取 JSON 資料，避免重複請求
     let cachedHistoryData = null;
 
     // 預設日期為今天
@@ -280,23 +266,20 @@
     const day = String(today.getDate()).padStart(2, "0");
     endDateInput.value = `${year}-${month}-${day}`;
 
-   // 取得焦點時反白全選，方便直接鍵入替換，不阻擋 autocomplete 下拉選單
+    // 焦點反白全選
     codeInput.addEventListener("focus", () => {
       codeInput.select();
     });
 
-    // 限制英數字，且連打「++」瞬間清空
+    // 限制英數字，連打「++」瞬間清空
     codeInput.addEventListener("input", () => {
-      // 偵測到連打 2 次 + 即清空
       if (codeInput.value.includes("++")) {
         codeInput.value = "";
         return;
       }
-      // 只保留英文字母、數字以及暫時輸入的第一個 +
       codeInput.value = codeInput.value.replace(/[^a-zA-Z0-9+]/g, "").toUpperCase();
     });
 
-    // 離開輸入框時若殘留單一個 + 則自動清除
     codeInput.addEventListener("blur", () => {
       codeInput.value = codeInput.value.replaceAll("+", "");
     });
@@ -336,28 +319,66 @@
 
       const table = document.createElement("table");
       const thead = document.createElement("thead");
-      const headerRow = document.createElement("tr");
-      headerRow.append(createCell("th", "日期"));
 
-      for (const field of FIELDS) {
-        headerRow.append(createCell("th", field));
+      // 第一層 Header
+      const headerRow1 = document.createElement("tr");
+      
+      const thDate = createCell("th", "日期");
+      thDate.rowSpan = 2;
+      const thCode = createCell("th", "代號");
+      thCode.rowSpan = 2;
+      const thName = createCell("th", "名稱");
+      thName.rowSpan = 2;
+
+      const thOdd = createCell("th", "盤後零股", "odd-group-header");
+      thOdd.colSpan = 6;
+
+      const thRound = createCell("th", "當天整股成交資訊", "round-group-header");
+      thRound.colSpan = 3;
+
+      headerRow1.append(thDate, thCode, thName, thOdd, thRound);
+
+      // 第二層 Header
+      const headerRow2 = document.createElement("tr");
+      const subFields = [
+        "成交價", "成交股數", "買價", "買量", "賣價", "賣量",
+        "收盤價", "漲跌幅", "成交股數"
+      ];
+
+      for (const field of subFields) {
+        headerRow2.append(createCell("th", field));
       }
 
-      thead.append(headerRow);
+      thead.append(headerRow1, headerRow2);
 
+      // 內容 Rows
       const tbody = document.createElement("tbody");
       for (const record of records) {
         const tr = document.createElement("tr");
-        tr.append(createCell("td", formatDisplayDate(record.date), "date-cell"));
+        const odd = record.item.odd || {};
+        const round = record.item.round || {};
 
-        for (const field of FIELDS) {
-          let className = "";
-          if (field === "證券代號") className = "code-cell";
-          if (field === "成交價") {
-            className = record.item[field] === "--" ? "no-trade" : "price-cell";
-          }
-          tr.append(createCell("td", record.item[field], className));
-        }
+        tr.append(createCell("td", formatDisplayDate(record.date), "date-cell"));
+        tr.append(createCell("td", record.code, "code-cell"));
+        tr.append(createCell("td", record.item.name || "--"));
+
+        // 盤後零股
+        tr.append(createCell("td", odd.price, odd.price === "--" ? "no-trade" : "price-cell"));
+        tr.append(createCell("td", odd.volume));
+        tr.append(createCell("td", odd.bidPrice));
+        tr.append(createCell("td", odd.bidVol));
+        tr.append(createCell("td", odd.askPrice));
+        tr.append(createCell("td", odd.askVol));
+
+        // 整股成交資訊
+        tr.append(createCell("td", round.close, "price-cell"));
+
+        let rateClass = "";
+        if (round.changeRate && round.changeRate.startsWith("+")) rateClass = "rate-up";
+        else if (round.changeRate && round.changeRate.startsWith("-")) rateClass = "rate-down";
+        tr.append(createCell("td", round.changeRate, rateClass));
+
+        tr.append(createCell("td", round.volume));
 
         tbody.append(tr);
       }
@@ -373,7 +394,7 @@
       setStatus("正在載入歷史資料庫…", "loading");
       const res = await fetch(DATA_SOURCE_URL, { cache: "no-cache" });
       if (!res.ok) {
-        throw new Error(`無法載入歷史資料庫 (${res.status})。請確認 GitHub Actions 是否已執行並產生 data/odd_history.json。`);
+        throw new Error(`無法載入歷史資料庫 (${res.status})。請確認 GitHub Actions 是否已執行產生 data/odd_history.json。`);
       }
 
       cachedHistoryData = await res.json();
@@ -413,6 +434,7 @@
             if (stockInfo) {
               matchedRecords.push({
                 date: dateStr,
+                code: code,
                 item: stockInfo
               });
             }
@@ -422,14 +444,14 @@
 
         if (matchedRecords.length === 0) {
           setStatus(
-            `在截止日 (${formatDisplayDate(endDateValue)}) 前的資料庫中，找不到代號「${code}」的零股成交紀錄。`,
+            `在截止日 (${formatDisplayDate(endDateValue)}) 前的資料庫中，找不到代號「${code}」的交易紀錄。`,
             "warning"
           );
           return;
         }
 
         renderTable(matchedRecords);
-        setStatus(`已成功載入「${code}」最近 ${matchedRecords.length} 個交易日的零股行情。`, "loading");
+        setStatus(`已成功載入「${code}」最近 ${matchedRecords.length} 個交易日的行情。`, "loading");
       } catch (error) {
         console.error("Query failed:", error);
         setStatus(error.message || "發生未知錯誤", "error");
